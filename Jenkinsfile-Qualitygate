@@ -1,0 +1,69 @@
+pipeline {
+    agent any
+    environment {
+        PATH = "/usr/share/maven/bin:$PATH"
+    }
+    tools {
+        maven 'Maven' 
+    }
+
+    stages {
+        stage("Clone") {
+            steps {
+                git branch: "master", url: "https://github.com/Sunilobi/pipeline.git"
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarserver') {
+                    sh "mvn sonar:sonar"
+                }
+            }
+        }
+        
+        stage('Quality_Gate') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh "mvn clean install"
+            }
+        }
+        
+        stage('Publish to JFrog Artifactory') {
+            environment {
+                ARTIFACTORY_SERVER = 'Artifactory_local'
+            }
+            steps {
+                script {
+                    def server = Artifactory.server(ARTIFACTORY_SERVER)
+                    server.url = 'http://localhost:8082/artifactory'
+                    server.credentialsId = '9aefc79a-36d7-4929-9466-b4b0b9dfb8f2'
+
+                    def rtMaven = Artifactory.newMavenBuild()
+                    rtMaven.tool = 'Maven' // Specify the name of your Maven tool
+                    rtMaven.deployer releaseRepo: 'my_repo', snapshotRepo: 'my_repo'
+                    rtMaven.resolver releaseRepo: 'my_repo', snapshotRepo: 'my_repo'
+
+                    def buildInfo = rtMaven.run pom: 'pom.xml', goals: 'clean install'
+                    def artifactoryBuildInfo = Artifactory.newBuildInfo()
+                    artifactoryBuildInfo.append(buildInfo)
+                    server.publishBuildInfo(artifactoryBuildInfo)
+                }
+            }
+        }
+
+        stage('Deploy Web Application') {
+            steps {
+                sh 'cp webapp/target/webapp.war /opt/tomcat/webapps/'
+                sh '/opt/tomcat/bin/catalina.sh run'
+            }
+        }
+    }
+}
