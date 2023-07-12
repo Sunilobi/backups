@@ -1,0 +1,39 @@
+pipeline {
+    agent any
+    environment {
+        PATH = "/usr/share/maven/bin:$PATH"
+    }
+    tools {
+        maven 'Maven' 
+    }
+
+    stages {
+        stage("Clone") {
+            steps {
+                git branch: "master", url: "https://github.com/Sunilobi/pipeline.git"
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh "mvn clean install"
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarserver') {
+                    sh "mvn sonar:sonar"
+                }
+            }
+        }
+
+        stage('Deploy Web Application') {
+            steps {
+                sh 'cp webapp/target/webapp.war /opt/tomcat/webapps/'
+                sh '/opt/tomcat/bin/catalina.sh run'
+            }
+        }
+
+    }
+}
