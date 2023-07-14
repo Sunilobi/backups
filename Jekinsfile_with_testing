@@ -1,0 +1,76 @@
+pipeline {
+    agent any
+    environment {
+        PATH = "/usr/share/maven/bin:$PATH"
+    }
+    tools {
+        maven 'Maven' 
+    }
+    
+    stages {
+        stage("Clone for code analysis") {
+            steps {
+                git branch: "dev", url: "https://github.com/Sunilobi/pipeline.git"
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarserver') {
+                    sh "mvn sonar:sonar"
+                }
+            }
+        }
+        
+        stage("Clone for build") {
+            steps {
+                git branch: "master", url: "https://github.com/Sunilobi/pipeline.git"
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                sh "mvn clean install"
+            }
+        }
+        
+        stage('Publish to JFrog Artifactory') {
+            environment {
+                ARTIFACTORY_SERVER = 'Artifactory_local'
+            }
+            steps {
+                script {
+                    def server = Artifactory.server(ARTIFACTORY_SERVER)
+                    server.url = 'http://localhost:8082/artifactory'
+                    server.credentialsId = '9aefc79a-36d7-4929-9466-b4b0b9dfb8f2'
+
+                    def rtMaven = Artifactory.newMavenBuild()
+                    rtMaven.tool = 'Maven' // Specify the name of your Maven tool
+                    rtMaven.deployer releaseRepo: 'my_local_repo', snapshotRepo: 'my_local_repo'
+                    rtMaven.resolver releaseRepo: 'my_local_repo', snapshotRepo: 'my_local_repo'
+
+                    def buildInfo = Artifactory.newBuildInfo()
+                    
+                    // Upload all files in the 1.0-SNAPSHOT directory
+                    def uploadSpec = """{
+                        "files": [
+                            {
+                                "pattern": "/var/lib/jenkins/.m2/repository/com/example/maven-project/webapp/1.0-SNAPSHOT/*",
+                                "target": "my_local_repo/com/example/maven-project/webapp/1.0-SNAPSHOT/"
+                            }
+                        ]
+                    }"""
+                    
+                    server.upload spec: uploadSpec, buildInfo: buildInfo
+                    server.publishBuildInfo buildInfo
+                }
+            }
+        }
+        stage('Deploy Web Application') {
+            steps {
+                sh 'cp webapp/target/webapp.war /opt/tomcat/webapps/'
+                sh '/opt/tomcat/bin/catalina.sh run'
+            }
+        }
+    }
+}
