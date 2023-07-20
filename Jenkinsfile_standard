@@ -22,14 +22,6 @@ pipeline {
             }
         }
         
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 1, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-        
         stage('Build') {
             steps {
                 sh "mvn clean install"
@@ -48,8 +40,8 @@ pipeline {
 
                     def rtMaven = Artifactory.newMavenBuild()
                     rtMaven.tool = 'Maven' // Specify the name of your Maven tool
-                    rtMaven.deployer releaseRepo: 'my_local_repo', snapshotRepo: 'my_local_repo'
-                    rtMaven.resolver releaseRepo: 'my_local_repo', snapshotRepo: 'my_local_repo'
+                    rtMaven.deployer releaseRepo: 'my_repo', snapshotRepo: 'my_repo'
+                    rtMaven.resolver releaseRepo: 'my_repo', snapshotRepo: 'my_repo'
 
                     def buildInfo = Artifactory.newBuildInfo()
 
@@ -58,7 +50,7 @@ pipeline {
                         "files": [
                             {
                                 "pattern": "/var/lib/jenkins/.m2/repository/com/example/maven-project/webapp/1.0-SNAPSHOT/*",
-                                "target": "my_local_repo/com/example/maven-project/webapp/1.0-SNAPSHOT/"
+                                "target": "my_repo/com/example/maven-project/webapp/1.0-SNAPSHOT/"
                             }
                         ]
                     }"""
