@@ -6,25 +6,19 @@ pipeline {
     tools {
         maven 'Maven' 
     }
-    
+
     stages {
-        stage("Clone for code analysis") {
+        stage("Clone") {
             steps {
-                git branch: "dev", url: "https://github.com/Sunilobi/pipeline.git"
+                git branch: "master", url: "https://github.com/Sunilobi/pipeline.git"
             }
         }
-        
+
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonarserver') {
                     sh "mvn sonar:sonar"
                 }
-            }
-        }
-        
-        stage("Clone for build") {
-            steps {
-                git branch: "master", url: "https://github.com/Sunilobi/pipeline.git"
             }
         }
         
@@ -46,30 +40,47 @@ pipeline {
 
                     def rtMaven = Artifactory.newMavenBuild()
                     rtMaven.tool = 'Maven' // Specify the name of your Maven tool
-                    rtMaven.deployer releaseRepo: 'my_local_repo', snapshotRepo: 'my_local_repo'
-                    rtMaven.resolver releaseRepo: 'my_local_repo', snapshotRepo: 'my_local_repo'
+                    rtMaven.deployer releaseRepo: 'my_repo', snapshotRepo: 'my_repo'
+                    rtMaven.resolver releaseRepo: 'my_repo', snapshotRepo: 'my_repo'
 
                     def buildInfo = Artifactory.newBuildInfo()
-                    
+
                     // Upload all files in the 1.0-SNAPSHOT directory
                     def uploadSpec = """{
                         "files": [
                             {
                                 "pattern": "/var/lib/jenkins/.m2/repository/com/example/maven-project/webapp/1.0-SNAPSHOT/*",
-                                "target": "my_local_repo/com/example/maven-project/webapp/1.0-SNAPSHOT/"
+                                "target": "my_repo/com/example/maven-project/webapp/1.0-SNAPSHOT/"
                             }
                         ]
                     }"""
-                    
+
                     server.upload spec: uploadSpec, buildInfo: buildInfo
                     server.publishBuildInfo buildInfo
                 }
             }
         }
+        
         stage('Deploy Web Application') {
             steps {
                 sh 'cp webapp/target/webapp.war /opt/tomcat/webapps/'
                 sh '/opt/tomcat/bin/catalina.sh run'
+            }
+        }
+        
+        stage('Deploy to Selenium Grid') {
+            steps {
+                // Assuming you have a script to deploy the web application to the Selenium Grid.
+                // Replace the 'deploy_to_selenium_grid.sh' with the actual script name.
+                sh './deploy_to_selenium_grid.sh'
+            }
+        }
+        
+        stage('Selenium Testing') {
+            steps {
+                // Assuming you have a script to run the Selenium tests.
+                // Replace 'run_selenium_tests.sh' with the actual script name.
+                sh './run_selenium_tests.sh'
             }
         }
     }
